@@ -1316,7 +1316,8 @@ int main(int argc, char** args) {
         }
 
         axy->keep_fitsimg = (newfits || scamp);
-
+        
+        logverb("QHYCCD LOG:  go to augment-xylist ++++++++++++\n");
         if (augment_xylist(axy, me)) {
             ERROR("augment-xylist failed");
             exit(-1);
