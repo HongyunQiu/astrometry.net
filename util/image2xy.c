@@ -74,6 +74,7 @@ int image2xy_run(simplexy_t* s,
     }
 
     do {
+        logverb("QHYCCD LOG:  go to simplexy_run ++++++++++\n");
         simplexy_run(s);
 
         tryagain = FALSE;

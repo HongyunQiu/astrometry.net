@@ -170,7 +170,8 @@ int image2xy_files(const char* infn, const char* outfn,
 
         params->nx = naxisn[0];
         params->ny = naxisn[1];
-
+        
+        logverb("QHYCCD LOG:  go to image2xy_run ++++++++++\n");
         image2xy_run(params, downsample, downsample_as_required);
 
         if (params->Lorder)

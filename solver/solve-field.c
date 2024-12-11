@@ -540,6 +540,7 @@ static void run_engine(sl* engineargs) {
     cmd = sl_implode(engineargs, " ");
     logmsg("Solving...\n");
     logverb("Running:\n  %s\n", cmd);
+    logverb("QHYCCD LOG:  go to engine-main ++++++++++\n");
     fflush(NULL);
     if (run_command_get_outputs(cmd, NULL, NULL)) {
         ERROR("engine failed.  Command that failed was:\n  %s", cmd);
@@ -1317,6 +1318,7 @@ int main(int argc, char** args) {
 
         axy->keep_fitsimg = (newfits || scamp);
 
+        logverb("QHYCCD LOG:  go to augment-xylist ++++++++++++\n");
         if (augment_xylist(axy, me)) {
             ERROR("augment-xylist failed");
             exit(-1);

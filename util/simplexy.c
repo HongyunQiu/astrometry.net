@@ -304,10 +304,15 @@ int simplexy_run(simplexy_t* s) {
     // estimate the noise in the image (sigma)
     if (s->sigma == 0.0) {
         logverb("simplexy: measuring image noise (sigma)...\n");
-        if (s->image_u8)
+        if (s->image_u8){
+            logverb("QHYCCD LOG:  go to dsigma_u8 ++++++++++\n");
             dsigma_u8(s->image_u8, nx, ny, 5, 0, &(s->sigma));
-        else
+        }
+        else{
+            logverb("QHYCCD LOG:  go to dsigma ++++++++++\n");
             dsigma(s->image, nx, ny, 5, 0, &(s->sigma));
+        }
+            
         logverb("simplexy: found sigma=%g.\n", s->sigma);
     } else {
         logverb("simplexy: assuming sigma=%g.\n", s->sigma);
@@ -391,12 +396,16 @@ int simplexy_run(simplexy_t* s) {
 	
     /* find all peaks within each object */
     logverb("simplexy: finding peaks...\n");
-    if (bgsub)
+    if (bgsub){
+        logverb("QHYCCD LOG:  go to dallpeaks ++++++++++\n");
         dallpeaks(bgsub, nx, ny, ccimg, s->x, s->y, &(s->npeaks), s->dpsf,
                   s->sigma, s->dlim, s->saddle, s->maxper, s->maxnpeaks, s->sigma, s->maxsize);
-    else
+    }else{
+        logverb("QHYCCD LOG:  go to dallpeaks_i16 ++++++++++\n");
         dallpeaks_i16(bgsub_i16, nx, ny, ccimg, s->x, s->y, &(s->npeaks), s->dpsf,
                       s->sigma, s->dlim, s->saddle, s->maxper, s->maxnpeaks, s->sigma, s->maxsize);
+    }
+        
     logmsg("simplexy: found %i sources.\n", s->npeaks);
     FREEVEC(ccimg);
 
