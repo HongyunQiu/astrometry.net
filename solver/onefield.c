@@ -784,10 +784,10 @@ static anbool record_match_callback(MatchObj* mo, void* userdata) {
     } else {
         if (bp->solver.index) {
             char* base = basename_safe(bp->solver.index->indexname);
-            logmsg("Field %i: solved with index %s.\n", mymo->fieldnum, base);
+            logmsg("QHYCCD solver.index Field %i: solved with index %s.\n", mymo->fieldnum, base);
             free(base);
         } else {
-            logmsg("Field %i: solved with index %i", mymo->fieldnum, mymo->indexid);
+            logmsg("QHYCCD++++ Field %i: solved with index %i", mymo->fieldnum, mymo->indexid);
             if (mymo->healpix >= 0)
                 logmsg(", healpix %i\n", mymo->healpix);
             else

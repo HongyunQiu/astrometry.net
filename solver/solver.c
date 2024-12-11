@@ -1017,6 +1017,7 @@ void solver_run(solver_t* solver) {
                             // ("dimquads - 3" because we've set stars A, B, and C at this point)
                             add_stars(pq, field, D, dimquads-3, 0, newpoint, dimquads, solver, tol2);
                         } else {
+                            logverb("QHYCCD go to TRY_ALL_CODES -----------\n");
                             TRY_ALL_CODES(pq, field, dimquads, solver, tol2);
                         }
                         if (solver->quit_now)
@@ -1114,7 +1115,7 @@ static void try_all_codes_2(const int* fieldstars, int dimquad,
 
     for (i=0; i<DQMAX; i++)
         placed[i] = FALSE;
-
+    logverb("QHYCCD ---Un-flipped  try_permutations \n");
     try_permutations(fieldstars, dimquad, code, solver, current_parity,
                      tol2, stars, NULL, 0, placed, &result);
     if (unlikely(solver->quit_now))
@@ -1130,6 +1131,7 @@ static void try_all_codes_2(const int* fieldstars, int dimquad,
     for (i=0; i<DQMAX; i++)
         placed[i] = FALSE;
 
+    logverb("QHYCCD ---Flipped:   try_permutations \n");
     try_permutations(fieldstars, dimquad, flipcode, solver, current_parity,
                      tol2, stars, NULL, 0, placed, &result);
 
@@ -1395,7 +1397,7 @@ static int solver_handle_hit(solver_t* sp, MatchObj* mo, sip_t* verifysip,
 
     if (mo->logodds >= sp->best_logodds) {
         sp->best_logodds = mo->logodds;
-        logverb("Got a new best match: logodds %g.\n", mo->logodds);
+        logverb("QHYCCD ---Got a new best match: logodds %g.\n", mo->logodds);
     }
 
     if (mo->logodds >= sp->logratio_totune &&

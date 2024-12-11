@@ -271,7 +271,7 @@ index_t* index_load(const char* indexname, int flags, index_t* dest) {
     index_t* allocd = NULL;
 
     if (flags & INDEX_ONLY_LOAD_METADATA)
-        logverb("Loading metadata for %s...\n", indexname);
+        logverb("QHYCCD Loading metadata for %s...\n", indexname);
 
     if (!dest)
         allocd = dest = calloc(1, sizeof(index_t));

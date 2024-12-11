@@ -936,6 +936,7 @@ int augment_xylist(augment_xylist_t* axy,
             sxyparams.invert = axy->invert_image;
             sxyparams.plim = axy->image_nsigma;
 
+            logverb("QHYCCD LOG:  go to image2xy_files ++++++++++\n");
             // MAGIC 3: downsample by a factor of 2, up to 3 times.
             if (image2xy_files(fitsimgfn, xylsfn, TRUE, axy->downsample, 3,
                                axy->fitsimgext, 0, &sxyparams)) {
@@ -1447,7 +1448,7 @@ int augment_xylist(augment_xylist_t* axy,
     if (!axy->no_delete_temp) {
         for (i=0; i<sl_size(tempfiles); i++) {
             char* fn = sl_get(tempfiles, i);
-            logverb("Deleting temp file %s\n", fn);
+            logverb("QHYCCD   -----Deleting temp file %s\n", fn);
             if (unlink(fn)) {
                 SYSERROR("Failed to delete temp file \"%s\"", fn);
             }

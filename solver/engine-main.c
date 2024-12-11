@@ -253,6 +253,7 @@ int main(int argc, char** args) {
     }
 
     if (!streq(configfn, "none")) {
+        logverb("QHYCCD LOG:  go to engine ++++++++++\n");
         if (engine_parse_config_file(engine, configfn)) {
             logerr("Failed to parse (or encountered an error while interpreting) config file \"%s\"\n", configfn);
             exit( -1);
