@@ -97,3 +97,8 @@ util/wcs-match
 util/wcs-pv2sip
 report.txt
 .DS_Store
+catalogs/ucac5tofits
+/libkd/build/lib.linux-x86_64-3.10/spherematch_c.cpython-310-x86_64-linux-gnu.so
+/plot/build/lib.linux-x86_64-3.10/_plotstuff_c.cpython-310-x86_64-linux-gnu.so
+/util/build/lib.linux-x86_64-3.10/_util.cpython-310-x86_64-linux-gnu.so
+/catalogs/ucac5tofits

@@ -1,2 +1,2 @@
 export PATH="/usr/local/astrometry/bin/:$PATH"
-env "PATH=$PATH" solve-field ~/Downloads/star2/2025_06_26T07_52_17_277.fits --index-dir /usr/share/astrometry --overwrite --cpulimit 5 --scale-units degwidth --scale-low 1 --scale-high 3.9 --nsigma 8  --no-plots  --no-remove-lines --uniformize 0 --temp-dir /dev/shm
+env "PATH=$PATH" solve-field ~/Downloads/star2/1.fits --index-dir /usr/share/astrometry --overwrite --cpulimit 5 --scale-units degwidth --scale-low 1 --scale-high 3.9 --nsigma 8  --no-plots  --no-remove-lines --uniformize 0 --temp-dir /dev/shm  --timestamp -v

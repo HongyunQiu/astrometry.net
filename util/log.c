@@ -17,6 +17,21 @@
 static int g_thread_specific = 0;
 static log_t g_logger;
 
+    int fd;
+    const char* no_color;
+    if (!logger || !logger->f)
+        return FALSE;
+    // Respect the widely-used NO_COLOR convention:
+    // https://no-color.org/
+    no_color = getenv("NO_COLOR");
+    if (no_color && no_color[0])
+        return FALSE;
+    fd = fileno(logger->f);
+    if (fd < 0)
+        return FALSE;
+    return (isatty(fd) ? TRUE : FALSE);
+}
+
 void log_set_thread_specific() {
     g_thread_specific = 1;
 }
@@ -92,8 +107,16 @@ static void loglvl(const log_t* logger, enum log_level level,
         return;
     AN_THREAD_LOCK(loglock);
     if (logger->f) {
-        if (logger->timestamp)
-            fprintf(logger->f, "[%6i: %.3f] ", (int)getpid(), timenow() - logger->t0);
+        if (logger->timestamp) {
+            if (log_should_colorize_timestamp(logger)) {
+                // Green timestamp prefix.
+                fprintf(logger->f, "\x1b[32m[%6i: %.3f]\x1b[0m ",
+                        (int)getpid(), timenow() - logger->t0);
+            } else {
+                fprintf(logger->f, "[%6i: %.3f] ",
+                        (int)getpid(), timenow() - logger->t0);
+            }
+        }
         //fprintf(logger->f, "%s:%i ", file, line);
         vfprintf(logger->f, format, va);
         fflush(logger->f);
