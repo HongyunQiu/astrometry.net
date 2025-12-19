@@ -16,7 +16,7 @@
 
 static int g_thread_specific = 0;
 static log_t g_logger;
-
+static anbool log_should_colorize_timestamp(const log_t* logger) {
     int fd;
     const char* no_color;
     if (!logger || !logger->f)
