@@ -9,7 +9,7 @@ CircleCI: [![Build Status](https://img.shields.io/circleci/project/github/dstnds
 Automatic recognition of astronomical images; or standards-compliant
 astrometric metadata from data.
 
-Documentation: https://astrometrynet.readthedocs.io/en/latest/
+Documentation: /
 
 > If you have astronomical imaging of the sky with celestial coordinates
 > you do not know—or do not trust—then Astrometry.net is for you. Input
