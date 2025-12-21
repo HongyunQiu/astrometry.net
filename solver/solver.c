@@ -29,6 +29,26 @@
 #include "errors.h"
 #include "tweak2.h"
 
+// Optional profiling output for performance investigations.
+// Controlled by solver_set_profile() / solver_get_profile() and enabled via
+// astrometry-engine --profile-solver (and forwarded by solve-field).
+static anbool g_solver_profile = FALSE;
+static int g_solver_profile_runid = 0;
+// Cumulative timers/counters for the current solver_run() (only meaningful when profiling enabled).
+static double g_prof_kd_time = 0.0;
+static long   g_prof_kd_calls = 0;
+static long   g_prof_kd_total_results = 0;
+static double g_prof_verify_time = 0.0;
+static long   g_prof_verify_calls = 0;
+void solver_set_profile(anbool enable) {
+    g_solver_profile = enable;
+}
+anbool solver_get_profile(void) {
+    return g_solver_profile;
+}
+#define SOLVER_PROFILE(fmt, ...) \
+    do { if (unlikely(g_solver_profile)) logmsg("[SOLVER_PROFILE] " fmt, ##__VA_ARGS__); } while (0)
+
 #if TESTING_TRYALLCODES
 #define DEBUGSOLVER 1
 #define TRY_ALL_CODES test_try_all_codes
@@ -895,6 +915,38 @@ void solver_run(solver_t* solver) {
          * scale is acceptable, computing the transformation to code
          * coordinates, and deciding which C,D stars are in the circle.
          */
+        // Reset per-run profiling accumulators.
+        if (solver_get_profile()) {
+            g_solver_profile_runid++;
+            g_prof_kd_time = 0.0;
+            g_prof_kd_calls = 0;
+            g_prof_kd_total_results = 0;
+            g_prof_verify_time = 0.0;
+            g_prof_verify_calls = 0;
+            SOLVER_PROFILE("run %i: start (numxy=%i, startobj=%i, endobj=%i, indexes=%zu)\n",
+                           g_solver_profile_runid, numxy, solver->startobj, solver->endobj, num_indexes);
+            SOLVER_PROFILE("run %i: params (funits=[%g,%g] arcsec/pix, codetol=%g, verify_pix=%g, parity=%i)\n",
+                           g_solver_profile_runid, solver->funits_lower, solver->funits_upper,
+                           solver->codetol, solver->verify_pix, solver->parity);
+            for (i = 0; i < num_indexes; i++) {
+                index_t* index = pl_get(solver->indexes, i);
+                SOLVER_PROFILE("run %i: index %zu/%zu: %s (indexid=%i healpix=%i)\n",
+                               g_solver_profile_runid, i + 1, num_indexes,
+                               (index && index->indexname ? index->indexname : "(null)"),
+                               (index ? index->indexid : -1),
+                               (index ? index->healpix : -1));
+            }
+        }
+
+        double prof_last_t = timenow();
+        int prof_last_tries = solver->numtries;
+        int prof_last_matches = solver->nummatches;
+        int prof_last_verified = solver->num_verified;
+        double prof_last_kd_time = g_prof_kd_time;
+        long prof_last_kd_calls = g_prof_kd_calls;
+        long prof_last_kd_results = g_prof_kd_total_results;
+        double prof_last_verify_time = g_prof_verify_time;
+        long prof_last_verify_calls = g_prof_verify_calls;
         for (newpoint = solver->startobj; newpoint < numxy; newpoint++) {
 
             debug("Trying newpoint=%i (%.1f,%.1f)\n", newpoint,
@@ -1026,6 +1078,33 @@ void solver_run(solver_t* solver) {
             }
             logverb("object %u of %u: %i quads tried, %i matched.\n",
                     newpoint + 1, numxy, solver->numtries, solver->nummatches);
+            if (solver_get_profile()) {
+                double now = timenow();
+                int dtries = solver->numtries - prof_last_tries;
+                int dmatches = solver->nummatches - prof_last_matches;
+                int dverified = solver->num_verified - prof_last_verified;
+                double dkdtime = g_prof_kd_time - prof_last_kd_time;
+                long dkd_calls = g_prof_kd_calls - prof_last_kd_calls;
+                long dkd_results = g_prof_kd_total_results - prof_last_kd_results;
+                double dvtime = g_prof_verify_time - prof_last_verify_time;
+                long dv_calls = g_prof_verify_calls - prof_last_verify_calls;
+
+                SOLVER_PROFILE("run %i object %u/%u: dt=%.3f s, +tries=%i, +matches=%i, +verified=%i; KD(dt=%.3f s calls=%ld results=%ld); verify(dt=%.3f s calls=%ld)\n",
+                               g_solver_profile_runid,
+                               newpoint + 1, numxy, now - prof_last_t,
+                               dtries, dmatches, dverified,
+                               dkdtime, dkd_calls, dkd_results,
+                               dvtime, dv_calls);
+                prof_last_t = now;
+                prof_last_tries = solver->numtries;
+                prof_last_matches = solver->nummatches;
+                prof_last_verified = solver->num_verified;
+                prof_last_kd_time = g_prof_kd_time;
+                prof_last_kd_calls = g_prof_kd_calls;
+                prof_last_kd_results = g_prof_kd_total_results;
+                prof_last_verify_time = g_prof_verify_time;
+                prof_last_verify_calls = g_prof_verify_calls;
+            }
 
             if ((solver->maxquads && (solver->numtries >= solver->maxquads))
                 || (solver->maxmatches && (solver->nummatches >= solver->maxmatches))
@@ -1241,8 +1320,18 @@ static void try_permutations(const int* origstars, int dimquad,
 #endif
 				
             // Search with the code we've built.
-            *presult = kdtree_rangesearch_options_reuse
-                (solver->index->codekd->tree, *presult, code, tol2, options);
+            if (unlikely(g_solver_profile)) {
+                double t0 = timenow();
+                *presult = kdtree_rangesearch_options_reuse
+                    (solver->index->codekd->tree, *presult, code, tol2, options);
+                g_prof_kd_time += (timenow() - t0);
+                g_prof_kd_calls++;
+                if (*presult)
+                    g_prof_kd_total_results += (*presult)->nres;
+            } else {
+                *presult = kdtree_rangesearch_options_reuse
+                    (solver->index->codekd->tree, *presult, code, tol2, options);
+            }
             //debug("      trying ABCD = [%i %i %i %i]: %i results.\n",
             //fstars[A], fstars[B], fstars[C], fstars[D], result->nres);
 
@@ -1385,12 +1474,23 @@ static int solver_handle_hit(solver_t* sp, MatchObj* mo, sip_t* verifysip,
 
     logaccept = MIN(sp->logratio_tokeep, sp->logratio_totune);
 
+    double prof_v0 = 0.0;
+    if (unlikely(g_solver_profile))
+        prof_v0 = timenow();
     verify_hit(sp->index->starkd, sp->index->cutnside,
                mo, verifysip, sp->vf, match_distance_in_pixels2,
                sp->distractor_ratio, sp->field_maxx, sp->field_maxy,
                sp->logratio_bail_threshold, logaccept,
                sp->logratio_stoplooking,
                sp->distance_from_quad_bonus, fake_match);
+    if (unlikely(g_solver_profile)) {
+        double dt = timenow() - prof_v0;
+        g_prof_verify_time += dt;
+        g_prof_verify_calls++;
+        // Only log "slow" verify calls to reduce noise.
+        if (dt >= 0.010)
+            SOLVER_PROFILE("verify_hit: dt=%.3f s (logodds=%g, indexid=%i)\n", dt, mo->logodds, mo->indexid);
+    }
     mo->nverified = sp->num_verified++;
 
     if (mo->logodds >= sp->best_logodds) {

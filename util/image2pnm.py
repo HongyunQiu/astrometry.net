@@ -11,6 +11,7 @@ import sys
 import os
 import os.path
 import tempfile
+import time
 
 from astrometry.util.shell import shell_escape
 from astrometry.util.filetype import filetype_short
@@ -52,12 +53,24 @@ funpack_cmd = 'funpack -E %i -S %s > %s'
 raw_id_cmd = 'dcraw -i %s >/dev/null 2> /dev/null'
 
 verbose = False
+timing = False
+
+def _now():
+    return time.time()
+
+def _print_timing(label, dt):
+    # Printed to stdout so callers like solve-field (via backtick()) can capture
+    # and re-log with their own timestamp prefix.
+    if timing:
+        print('image2pnm timing: %s=%.3f s' % (label, dt))
 
 def do_command(cmd):
     logging.debug('Running: "%s"' % cmd)
+    t0 = _now()
     if os.system(cmd) != 0:
         print('Command failed: %s' % cmd, file=sys.stderr)
         sys.exit(-1)
+    _print_timing('cmd(%s)' % cmd.split(' ', 1)[0], _now() - t0)
 
 def get_cmd(types, cmds):
     if types is None:
@@ -79,8 +92,11 @@ def uncompress_file(infile, uncompressed, typeinfo=None, extension=None):
     Returns: comptype
     comptype: None if the file wasn't compressed, or 'gz' or 'bz2'.
     """
+    t_all = _now()
     if typeinfo is None:
+        t0 = _now()
         typeinfo = filetype_short(infile)
+        _print_timing('filetype_short(uncompress)', _now() - t0)
         if typeinfo is None:
             logging.debug('Could not determine file type of "%s"' % infile)
             return None
@@ -98,22 +114,31 @@ def uncompress_file(infile, uncompressed, typeinfo=None, extension=None):
                     extension = 1
                 logging.debug(('Checking FITS header of %s ext %s for ZIMAGE card (fpack '
                                + 'compression)') % (infile, extension))
+                t0 = _now()
                 hdr = fitsio.read_header(infile, ext=extension)
+                _print_timing('fitsio.read_header(ZIMAGE)', _now() - t0)
                 if hdr.get('ZIMAGE', False):
                     # Compressed
                     cmd = (funpack_cmd % (
                         extension or 0,
                         shell_escape(infile), shell_escape(uncompressed)))
                     logging.debug('Fpack compressed; uncompressing with %s' % cmd)
+                    t0 = _now()
                     if os.system(cmd) == 0:
+                        _print_timing('funpack', _now() - t0)
+                        _print_timing('uncompress_total', _now() - t_all)
                         return 'fz'
             except:
                 pass
         logging.debug('File is not compressed: "%s"' % '/'.join(typeinfo))
+        _print_timing('uncompress_total', _now() - t_all)
         return None
     assert uncompressed != infile
     logging.debug('Compressed file (type %s), dumping to: "%s"' % (ext, uncompressed))
+    t0 = _now()
     do_command(cmd % (shell_escape(infile), shell_escape(uncompressed)))
+    _print_timing('uncompress_cmd', _now() - t0)
+    _print_timing('uncompress_total', _now() - t_all)
     return ext
 
 def is_raw(fn):
@@ -123,7 +148,9 @@ def is_raw(fn):
 
 # Returns (extension, command, error)
 def get_image_type(infile):
+    t0 = _now()
     typeinfo = filetype_short(infile)
+    _print_timing('filetype_short(image)', _now() - t0)
     if typeinfo is None:
         return (None, None, 'Could not determine file type (does the file exist?): %s' % infile)
     (ext,cmd) = get_cmd(typeinfo, imgcmds)
@@ -170,6 +197,7 @@ def image2pnm(infile, outfile, force_ppm=False, extension=None, mydir=None):
 
     - error: (string): error string, or None
     """
+    t_all = _now()
     (ext, cmd, err) = get_image_type(infile)
     if ext is None:
         return (None, 'Image type not recognized: ' + err)
@@ -192,17 +220,23 @@ def image2pnm(infile, outfile, force_ppm=False, extension=None, mydir=None):
 
     if ext == fitsext and mydir:
         # an-fitstopnm: add explicit path...
+        t0 = _now()
         cmd = find_program(mydir, cmd)
+        _print_timing('find_program(an-fitstopnm)', _now() - t0)
         if cmd is None:
             return (None, 'Couldn\'t find the program "an-fitstopnm".')
 
     # Do the actual conversion
+    t0 = _now()
     do_command(cmd % (shell_escape(infile), shell_escape(outfile)))
+    _print_timing('convert_cmd', _now() - t0)
 
     if force_ppm:
         if ext == pgmext:
             # Convert to PPM.
+            t0 = _now()
             do_command(pgmcmd % (shell_escape(outfile), shell_escape(original_outfile)))
+            _print_timing('pgm_to_ppm', _now() - t0)
             tempfiles.append(outfile)
         else:
             # print 'file type extension:', ext, '; renaming', outfile, 'to', original_outfile
@@ -211,10 +245,12 @@ def image2pnm(infile, outfile, force_ppm=False, extension=None, mydir=None):
     for fn in tempfiles:
         os.unlink(fn)
     # Success
+    _print_timing('image2pnm_total', _now() - t_all)
     return (ext, None)
 
 def convert_image(infile, outfile, uncompressed=None, force_ppm=False,
                   extension=None, mydir=None):
+    t_all = _now()
     tempfiles = []
     # if the caller didn't specify where to put the uncompressed file,
     # create a tempfile.
@@ -241,6 +277,7 @@ def convert_image(infile, outfile, uncompressed=None, force_ppm=False,
         logging.error('ERROR: %s' % errstr)
         raise RuntimeError(errstr)
     print(imgtype)
+    _print_timing('convert_image_total', _now() - t_all)
     return (imgtype, errstr)
 
 def main():
@@ -263,6 +300,9 @@ def main():
                       dest='extension', type='int',
                       help='FITS extension to read')
     parser.add_option('--mydir', help='Set directory to search for an-fitstopnm')
+    parser.add_option('--timing',
+                      action='store_true', dest='timing',
+                      help='print stage timing lines to stdout (for profiling)')
     parser.add_option('-v', '--verbose',
                       action='store_true', dest='verbose',
                       help='be chatty')
@@ -286,6 +326,8 @@ def main():
     
     global verbose
     verbose = options.verbose
+    global timing
+    timing = bool(options.timing)
 
     logformat = '%(message)s'
     if verbose:

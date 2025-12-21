@@ -100,6 +100,8 @@ static an_option_t options[] = {
      "write 'augmented xy list' (axy) file to a temp file"},
     {'\x88', "timestamp", no_argument, NULL,
      "add timestamps to log messages"},
+    {'\x99', "profile-solver", no_argument, NULL,
+     "enable extra solver profiling output from astrometry-engine (prefixed with [SOLVER_PROFILE])"},
     {'\x98', "dselip-qsort", no_argument, NULL,
      "use legacy qsort-based median selection (for benchmarking)"},
 };
@@ -866,6 +868,12 @@ int main(int argc, char** args) {
             break;
         case '\x88':
             timestamp = TRUE;
+            // Also tell astrometry-engine to timestamp its log messages, so output
+            // after "Running:" keeps the same timestamp style.
+            sl_append(engineargs, "--timestamp");
+            break;
+        case '\x99':
+            sl_append(engineargs, "--profile-solver");
             break;
         case '\x98':
             dselip_qsort = TRUE;
@@ -1312,7 +1320,20 @@ int main(int argc, char** args) {
 		want_pnm = FALSE;
 	    } else {
                 axy->imagefn = infile;
-                want_pnm = TRUE;
+                // For FITS input images, we can avoid the expensive FITS->PPM conversion
+                // unless plots are requested or the user explicitly requested a PNM output.
+                //
+                // Historically, solve-field would always create a PPM for any "image" input,
+                // even when --no-plots was used. That adds ~0.1s of overhead for FITS inputs.
+                if (!makeplots && !axy->pnmfn && suffix &&
+                    (strcaseeq(suffix, "fits") || strcaseeq(suffix, "fit") || strcaseeq(suffix, "fts"))) {
+                    // Enable the existing "assume FITS image" fast-path in augment-xylist:
+                    // it reads NAXIS1/2 from the FITS header and skips image2pnm/pnmfile.
+                    axy->assume_fits_image = TRUE;
+                    want_pnm = FALSE;
+                } else {
+                    want_pnm = TRUE;
+                }
             }
         }
 

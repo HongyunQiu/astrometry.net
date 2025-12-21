@@ -381,6 +381,15 @@ void solver_verify_sip_wcs(solver_t* solver, sip_t* sip); //, MatchObj* mo);
 
 void solver_run(solver_t* solver);
 
+/**
+ Enable/disable extra solver profiling output.
+ When enabled, the solver will emit additional log lines prefixed with
+ "[SOLVER_PROFILE]" to help identify performance bottlenecks.
+ Default: disabled.
+ */
+void solver_set_profile(anbool enable);
+anbool solver_get_profile(void);
+
 #define SOLVER_TWEAK2_AVAILABLE 1
 void solver_tweak2(solver_t* solver, MatchObj* mo, int order, sip_t* verifysip);
 

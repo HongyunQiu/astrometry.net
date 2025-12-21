@@ -42,6 +42,7 @@
 #include "log.h"
 #include "anqfits.h"
 #include "mathutil.h"
+#include "tic.h"
 
 static void delete_existing_an_headers(qfits_header* hdr);
 
@@ -729,6 +730,15 @@ int augment_xylist(augment_xylist_t* axy,
             }
 
             append_executable(cmd, "image2pnm", me);
+            if (verbose) {
+                // Optional: Have image2pnm print internal stage timings to stdout.
+                // We keep this opt-in for backwards compatibility with older installed
+                // image2pnm versions that don't recognize "--timing".
+                const char* env = getenv("AN_IMAGE2PNM_TIMING");
+                if (env && env[0] && strcmp(env, "0")) {
+                    sl_append(cmd, "--timing");
+                }
+            }
             if (axy->extension) {
                 sl_append(cmd, "--extension");
                 sl_appendf(cmd, "%i", axy->extension);
@@ -743,8 +753,9 @@ int augment_xylist(augment_xylist_t* axy,
                 sl_append(cmd, "--ppm");
             sl_append(cmd, "--mydir");
             append_escape(cmd, me);
-	    logmsg("Running command: %s\n", sl_join(cmd, " "));
+            double t0 = timenow();
             lines = backtick(cmd, verbose);
+            logverb("image2pnm wall time: %.3f s\n", timenow() - t0);
             axy->isfits = FALSE;
             for (i=0; i<sl_size(lines); i++) {
                 logverb("  %s\n", sl_get(lines, i));
@@ -760,7 +771,9 @@ int augment_xylist(augment_xylist_t* axy,
             // Get image W, H, depth.
             sl_append(cmd, "pnmfile");
             append_escape(cmd, pnmfn);
+            t0 = timenow();
             lines = backtick(cmd, verbose);
+            logverb("pnmfile wall time: %.3f s\n", timenow() - t0);
 
             if (sl_size(lines) == 0) {
                 ERROR("Got no output from the \"pnmfile\" program.");
@@ -828,7 +841,9 @@ int augment_xylist(augment_xylist_t* axy,
                 sl_append(cmd, ">");
                 append_escape(cmd, fitsimgfn);
 
+                double t0 = timenow();
                 run(cmd, verbose);
+                logverb("PPM->FITS wall time: %.3f s\n", timenow() - t0);
 
             } else if (pnmtype == 'G') {
                 logverb("Converting PGM image to FITS...\n");
@@ -838,7 +853,9 @@ int augment_xylist(augment_xylist_t* axy,
                 sl_append(cmd, ">");
                 append_escape(cmd, fitsimgfn);
 
+                double t0 = timenow();
                 run(cmd, verbose);
+                logverb("PGM->FITS wall time: %.3f s\n", timenow() - t0);
 
             } else if (pnmtype == 'B') {
                 logverb("Converting PBM image to FITS...\n");
@@ -849,7 +866,9 @@ int augment_xylist(augment_xylist_t* axy,
                 append_executable(cmd, "an-pnmtofits", me);
                 sl_append(cmd, ">");
                 append_escape(cmd, fitsimgfn);
+                double t0 = timenow();
                 run(cmd, verbose);
+                logverb("PBM->FITS wall time: %.3f s\n", timenow() - t0);
             } else {
                 assert(0);
             }

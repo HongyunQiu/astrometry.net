@@ -54,6 +54,9 @@
 static an_option_t myopts[] = {
     {'h', "help", no_argument, NULL, "print this help"},
     {'v', "verbose", no_argument, NULL, "+verbose"},
+    {'T', "timestamp", no_argument, NULL, "add timestamps to log messages"},
+    {'P', "profile-solver", no_argument, NULL,
+     "enable extra solver profiling output (lines prefixed with [SOLVER_PROFILE])"},
     {'c', "config",  required_argument, "file",
      "Use this config file (default: \"astrometry.cfg\" in the directory ../etc/ relative to the directory containing the \"astrometry-engine\" executable); 'none' for no config file"},
     {'d', "base-dir",  required_argument, "dir", 
@@ -110,6 +113,8 @@ int main(int argc, char** args) {
     char* solvedfn = NULL;
     int loglvl = LOG_MSG;
     anbool tostderr = FALSE;
+    anbool timestamp = FALSE;
+    anbool profile_solver = FALSE;
     char* infn = NULL;
     FILE* fin = NULL;
     anbool fromstdin = FALSE;
@@ -157,6 +162,12 @@ int main(int argc, char** args) {
         case 'v':
             loglvl++;
             break;
+        case 'T':
+            timestamp = TRUE;
+            break;
+        case 'P':
+            profile_solver = TRUE;
+            break;
         case 's':
             solvedfn = optarg;
         case 'C':
@@ -187,6 +198,9 @@ int main(int argc, char** args) {
     gslutils_use_error_system();
 
     log_init(loglvl);
+    if (timestamp)
+        log_set_timestamp(TRUE);
+    solver_set_profile(profile_solver);
     if (tostderr)
         log_to(stderr);
 
