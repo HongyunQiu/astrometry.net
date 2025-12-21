@@ -7,6 +7,7 @@
 #define DIMAGE_H
 
 #include <stdint.h>
+#include "astrometry/an-bool.h"
 
 // this is only really included here so that it can be tested :)
 typedef int32_t dimage_label_t;
@@ -19,6 +20,9 @@ int dfind2_u8(const unsigned char* image, int nx, int ny, int* objectimg, int* p
 
 float dselip(unsigned long k, unsigned long n, const float *arr);
 void dselip_cleanup(void);
+// For benchmarking/validation: choose selection method used by dselip().
+// Default is FALSE (use quickselect-style selection). TRUE forces legacy full-sort (qsort/QSORT_R).
+void dselip_set_use_qsort(anbool use_qsort);
 
 int dsmooth(float *image, int nx, int ny, float sigma, float *smooth);
 

@@ -39,6 +39,7 @@
 #include "wcs-rd2xy.h"
 #include "new-wcs.h"
 #include "scamp.h"
+#include "dimage.h"
 
 static an_option_t options[] = {
     {'h', "help",		   no_argument, NULL,
@@ -99,6 +100,8 @@ static an_option_t options[] = {
      "write 'augmented xy list' (axy) file to a temp file"},
     {'\x88', "timestamp", no_argument, NULL,
      "add timestamps to log messages"},
+    {'\x98', "dselip-qsort", no_argument, NULL,
+     "use legacy qsort-based median selection (for benchmarking)"},
 };
 
 static void print_help(const char* progname, bl* opts) {
@@ -776,6 +779,7 @@ int main(int argc, char** args) {
     sl* tempfiles2;
     sl* tempdirs;
     anbool timestamp = FALSE;
+    anbool dselip_qsort = FALSE;
     anbool tempaxy = FALSE;
     char* plotxy = NULL;
 
@@ -862,6 +866,9 @@ int main(int argc, char** args) {
             break;
         case '\x88':
             timestamp = TRUE;
+            break;
+        case '\x98':
+            dselip_qsort = TRUE;
             break;
         case '\x84':
             plotscale = atof(optarg);
@@ -974,6 +981,7 @@ int main(int argc, char** args) {
     log_init(loglvl);
     if (timestamp)
         log_set_timestamp(TRUE);
+    dselip_set_use_qsort(dselip_qsort);
 
     if (kmz && starts_with(kmz, "-"))
         logmsg("Do you really want to save KMZ to the file named \"%s\" ??\n", kmz);

@@ -15,6 +15,7 @@
 #include "dimage.h"
 #include "simplexy-common.h"
 #include "log.h"
+#include "tic.h"
 #include "errors.h"
 #include "resample.h"
 #include "an-bool.h"
@@ -177,6 +178,7 @@ int simplexy_run(simplexy_t* s) {
     int ny = s->ny;
     float limit;
     uint8_t* mask;
+    double t_simplexy0;
     // background-subtracted image.
     float* bgsub = NULL;
     int16_t* bgsub_i16 = NULL;
@@ -194,6 +196,8 @@ int simplexy_run(simplexy_t* s) {
     assert(s->image || s->image_u8);
     assert(!s->image || !s->image_u8);
 
+    t_simplexy0 = timenow();
+
     logverb("simplexy: nx=%d, ny=%d\n", nx, ny);
     logverb("simplexy: dpsf=%f, plim=%f, dlim=%f, saddle=%f\n",
             s->dpsf, s->plim, s->dlim, s->saddle);
@@ -210,7 +214,9 @@ int simplexy_run(simplexy_t* s) {
         }
     }
 
-    if (s->nobgsub) {
+    {
+        double t_bg0 = timenow();
+        if (s->nobgsub) {
         if (s->image)
             bgsub = s->image;
         else {
@@ -220,30 +226,43 @@ int simplexy_run(simplexy_t* s) {
                 bgsub_i16[i] = s->image_u8[i];
         }
 
-    } else {
+        logverb("simplexy: background subtraction disabled; prep took %.3f s\n",
+                timenow() - t_bg0);
+
+        } else {
         // background subtraction via median smoothing.
         logverb("simplexy: median smoothing...\n");
 
         if (s->image) {
             float* medianfiltered;
+            double t_med0 = timenow();
             medianfiltered = malloc((size_t)nx * (size_t)ny * sizeof(float));
             bgfree = medianfiltered;
             dmedsmooth(s->image, NULL, nx, ny, s->halfbox, medianfiltered);
+            logverb("simplexy: median smoothing (float) took %.3f s\n",
+                    timenow() - t_med0);
 
             if (s->bgimgfn) {
+                double t_write0 = timenow();
                 logverb("Writing background (median-filtered) image \"%s\"\n", s->bgimgfn);
                 write_fits_float_image(medianfiltered, nx, ny, s->bgimgfn);
+                logverb("Wrote background image \"%s\" in %.3f s\n",
+                        s->bgimgfn, timenow() - t_write0);
             }
 
             // subtract background from image, placing result in background.
+            t_med0 = timenow();
             for (i=0; i<nx*ny; i++)
                 medianfiltered[i] = s->image[i] - medianfiltered[i];
             bgsub = medianfiltered;
             medianfiltered = NULL;
+            logverb("simplexy: background subtract (float) took %.3f s\n",
+                    timenow() - t_med0);
 
         } else {
             // u8 image: run faster ctmf() median-smoother.
             unsigned char* medianfiltered_u8;
+            double t_med0 = timenow();
 
             if (MIN(nx,ny) < 2*s->halfbox+1)
                 s->halfbox = floor(((float)MIN(nx,ny) - 1.0) / 2.0);
@@ -251,31 +270,46 @@ int simplexy_run(simplexy_t* s) {
 
             medianfiltered_u8 = malloc((size_t)nx * (size_t)ny * sizeof(unsigned char));
             ctmf(s->image_u8, medianfiltered_u8, nx, ny, nx, nx, s->halfbox, 1, 512*1024);
+            logverb("simplexy: median smoothing (u8/ctmf) took %.3f s\n",
+                    timenow() - t_med0);
 
             if (s->bgimgfn) {
+                double t_write0 = timenow();
                 logverb("Writing background (median-filtered) image \"%s\"\n", s->bgimgfn);
                 write_fits_u8_image(medianfiltered_u8, nx, ny, s->bgimgfn);
+                logverb("Wrote background image \"%s\" in %.3f s\n",
+                        s->bgimgfn, timenow() - t_write0);
             }
 
             // Background-subtracted image.
             bgsub_i16 = malloc((size_t)nx * (size_t)ny * sizeof(int16_t));
             bgfree = bgsub_i16;
+            t_med0 = timenow();
             for (i=0; i<nx*ny; i++)
                 //bgsub_i16[i] = (int16_t)s->image_u8[i] - (int16_t)medianfiltered_u8[i];
                 bgsub_i16[i] = s->image_u8[i] - medianfiltered_u8[i];
             free(medianfiltered_u8);
+            logverb("simplexy: background subtract (u8->i16) took %.3f s\n",
+                    timenow() - t_med0);
         }
 
         if (s->bgsubimgfn) {
+            double t_write0 = timenow();
             logverb("Writing background-subtracted image \"%s\"\n", s->bgsubimgfn);
             if (bgsub)
                 write_fits_float_image(bgsub, nx, ny, s->bgsubimgfn);
             else
                 write_fits_i16_image(bgsub_i16, nx, ny, s->bgsubimgfn);
+            logverb("Wrote background-subtracted image \"%s\" in %.3f s\n",
+                    s->bgsubimgfn, timenow() - t_write0);
+        }
+        logverb("simplexy: background subtraction total took %.3f s\n",
+                timenow() - t_bg0);
         }
     }
 
     if (s->dpsf > 0.0) {
+        double t_psf0 = timenow();
         smoothed = malloc((size_t)nx * (size_t)ny * sizeof(float));
         smoothfree = smoothed;
         /* smooth by the point spread function (the optimal detection
@@ -284,31 +318,41 @@ int simplexy_run(simplexy_t* s) {
             dsmooth2(bgsub, nx, ny, s->dpsf, smoothed);
         else
             dsmooth2_i16(bgsub_i16, nx, ny, s->dpsf, smoothed);
+        logverb("simplexy: PSF smoothing (dpsf=%.3f) took %.3f s\n",
+                s->dpsf, timenow() - t_psf0);
     } else {
         if (bgsub)
             smoothed = bgsub;
         else {
+            double t_copy0 = timenow();
             smoothed = malloc((size_t)nx * (size_t)ny * sizeof(float));
             smoothfree = smoothed;
             for (i=0; i<(nx*ny); i++)
                 smoothed[i] = bgsub_i16[i];
+            logverb("simplexy: convert i16->float (no PSF smoothing) took %.3f s\n",
+                    timenow() - t_copy0);
         }
     }
 
     if (s->smoothimgfn) {
+        double t_write0 = timenow();
         logverb("Writing smoothed background-subtracted image \"%s\"\n",
                 s->smoothimgfn);
         write_fits_float_image(smoothed, nx, ny, s->smoothimgfn);
+        logverb("Wrote smoothed image \"%s\" in %.3f s\n",
+                s->smoothimgfn, timenow() - t_write0);
     }
 
     // estimate the noise in the image (sigma)
     if (s->sigma == 0.0) {
+        double t_sig0 = timenow();
         logverb("simplexy: measuring image noise (sigma)...\n");
         if (s->image_u8)
             dsigma_u8(s->image_u8, nx, ny, 5, 0, &(s->sigma));
         else
             dsigma(s->image, nx, ny, 5, 0, &(s->sigma));
-        logverb("simplexy: found sigma=%g.\n", s->sigma);
+        logverb("simplexy: found sigma=%g (measured in %.3f s).\n",
+                s->sigma, timenow() - t_sig0);
     } else {
         logverb("simplexy: assuming sigma=%g.\n", s->sigma);
     }
@@ -329,14 +373,19 @@ int simplexy_run(simplexy_t* s) {
 
     /* find pixels above the noise level, and flag a box of pixels around each one. */
     mask = malloc((size_t)nx*(size_t)ny);
+    {
+        double t_mask0 = timenow();
     if (!dmask(smoothed, nx, ny, limit, s->dpsf, mask)) {
         FREEVEC(smoothfree);
         return 0;
+    }
+        logverb("simplexy: dmask() took %.3f s\n", timenow() - t_mask0);
     }
     FREEVEC(smoothfree);
 
     /* save the mask image, if requested. */
     if (s->maskimgfn) {
+        double t_write0 = timenow();
         logverb("Writing masked image \"%s\"\n", s->maskimgfn);
         if (s->image_u8) {
             uint8_t* maskedimg = malloc((size_t)nx * (size_t)ny);
@@ -351,11 +400,18 @@ int simplexy_run(simplexy_t* s) {
             write_fits_float_image(maskedimg, nx, ny, s->maskimgfn);
             free(maskedimg);
         }
+        logverb("Wrote masked image \"%s\" in %.3f s\n",
+                s->maskimgfn, timenow() - t_write0);
     }
 
     /* find connected-components in the mask image. */
     ccimg = malloc((size_t)nx * (size_t)ny * sizeof(int));
+    {
+        double t_cc0 = timenow();
     dfind2_u8(mask, nx, ny, ccimg, &nblobs);
+        logverb("simplexy: dfind2_u8() took %.3f s (nblobs=%d)\n",
+                timenow() - t_cc0, nblobs);
+    }
     FREEVEC(mask);
     logverb("simplexy: found %i blobs\n", nblobs);
 
@@ -391,12 +447,16 @@ int simplexy_run(simplexy_t* s) {
 	
     /* find all peaks within each object */
     logverb("simplexy: finding peaks...\n");
-    if (bgsub)
+    if (bgsub){
+        logverb("simplexy: bgsub is true\n");
         dallpeaks(bgsub, nx, ny, ccimg, s->x, s->y, &(s->npeaks), s->dpsf,
                   s->sigma, s->dlim, s->saddle, s->maxper, s->maxnpeaks, s->sigma, s->maxsize);
-    else
+        }
+    else{
+        logverb("simplexy: bgsub is false\n");
         dallpeaks_i16(bgsub_i16, nx, ny, ccimg, s->x, s->y, &(s->npeaks), s->dpsf,
                       s->sigma, s->dlim, s->saddle, s->maxper, s->maxnpeaks, s->sigma, s->maxsize);
+    }
     logmsg("simplexy: found %i sources.\n", s->npeaks);
     FREEVEC(ccimg);
 
@@ -486,6 +546,7 @@ int simplexy_run(simplexy_t* s) {
 
     }
 
+    logverb("simplexy: total time %.3f s\n", timenow() - t_simplexy0);
     FREEVEC(bgfree);
 
     return 1;

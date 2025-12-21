@@ -27,7 +27,7 @@ int GLUE(dallpeaks, SUFFIX)(IMGTYPE *image,
 
 #undef GLUE
 #undef GLUE2
-
+	logverb("QHYCCD | dallpeaks\n");
 	int i, j, k, nobj;
 	int xcurr, ycurr, imore ;
 	float tmpxc, tmpyc, three[9];

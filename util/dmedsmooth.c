@@ -11,6 +11,8 @@
 
 #include "os-features.h"
 #include "simplexy-common.h"
+#include "log.h"
+#include "tic.h"
 
 /*
  * dmedsmooth.c
@@ -247,15 +249,23 @@ int dmedsmooth(const float *image,
     int *xgrid = NULL;
     int *ygrid = NULL;
     int nxgrid, nygrid;
+    double t0, tgrid, tint;
 
+    t0 = timenow();
     if (dmedsmooth_grid(image, masked, nx, ny, halfbox,
                         &grid, &xgrid, &ygrid, &nxgrid, &nygrid)) {
         return 0;
     }
+    tgrid = timenow();
     if (dmedsmooth_interpolate(grid, nx, ny, nxgrid, nygrid,
                                xgrid, ygrid, halfbox, smooth)) {
         return 0;
     }
+    tint = timenow();
+
+    logverb("dmedsmooth: halfbox=%d, nxgrid=%d, nygrid=%d; grid=%.3f s, interp=%.3f s, total=%.3f s\n",
+            halfbox, nxgrid, nygrid,
+            tgrid - t0, tint - tgrid, tint - t0);
 
     FREEVEC(grid);
     FREEVEC(xgrid);
