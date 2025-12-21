@@ -104,3 +104,5 @@ catalogs/ucac5tofits
 /catalogs/ucac5tofits
 test/results.txt
 test/log.txt
+test/typescript
+.gitignore
