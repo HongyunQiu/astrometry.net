@@ -40,6 +40,10 @@ int dpeaks(float *image, int nx, int ny, int *npeaks, int *xcen,
            int *ycen, float sigma, float dlim, float saddle, int maxnpeaks,
            int smooth, int checkpeaks, float minpeak);
 
+// For benchmarking/validation: choose checkpeaks implementation in dpeaks().
+// Default is FALSE (use faster union-find based check). TRUE forces legacy per-peak dfind2().
+void dpeaks_set_use_dfind2(anbool use_dfind2);
+
 int dcen3x3(float *image, float *xcen, float *ycen);
 
 int dsigma(float *image, int nx, int ny, int sp, int gridsize, float *sigma);

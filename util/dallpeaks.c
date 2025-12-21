@@ -15,6 +15,7 @@
 #include "simplexy-common.h"
 #include "log.h"
 #include "mathutil.h"
+#include "tic.h"
 
 /*
  * dallpeaks.c

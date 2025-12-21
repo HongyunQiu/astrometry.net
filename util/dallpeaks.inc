@@ -27,6 +27,17 @@ int GLUE(dallpeaks, SUFFIX)(IMGTYPE *image,
 
 #undef GLUE
 #undef GLUE2
+	double t_dall_start = timenow();
+	double t_sort = 0.0;
+	double t_bbox = 0.0;
+	double t_cutout = 0.0;
+	double t_smooth = 0.0;
+	double t_peaks = 0.0;
+	double t_maxgauss = 0.0;
+	int nobj_timed = 0;
+	int nsubpeaks_total = 0;
+	int ncentroid5_fail = 0;
+	int ncentroid3_fail_edge = 0;
 	logverb("QHYCCD | dallpeaks\n");
 	int i, j, k, nobj;
 	int xcurr, ycurr, imore ;
@@ -47,7 +58,11 @@ int GLUE(dallpeaks, SUFFIX)(IMGTYPE *image,
 	 == 1), etc.  The pixel coordinate is (x,y) = (indx[i] % nx,
 	 indx[i] / nx).
 	 */
-    indx = permuted_sort(object, sizeof(int), compare_ints_asc, NULL, nx*ny);
+	{
+		double t0 = timenow();
+		indx = permuted_sort(object, sizeof(int), compare_ints_asc, NULL, nx*ny);
+		t_sort += timenow() - t0;
+	}
 
 	// skip over the unlabelled pixels (object == -1)
 	for (k=0; k<(nx*ny) && object[indx[k]] == -1; k++);
@@ -62,11 +77,16 @@ int GLUE(dallpeaks, SUFFIX)(IMGTYPE *image,
 		int di, dj;
 		int oi, oj;
 		int xmax, ymax, xmin, ymin, onx, ony, nc;
+		double t_obj_start = timenow();
+		// Low-noise logging threshold (seconds) for expensive per-object stages.
+		const double log_stage_thresh = 0.050;
 
 		// the object number we're looking at.
 		current = object[indx[k]];
 
 		// find the object limits in pixel space.
+		{
+			double t0 = timenow();
 		xmax = -1;
 		xmin = nx + 1;
 		ymax = -1;
@@ -78,6 +98,8 @@ int GLUE(dallpeaks, SUFFIX)(IMGTYPE *image,
 			xmax = MAX(xmax, xcurr);
 			ymin = MIN(ymin, ycurr);
 			ymax = MAX(ymax, ycurr);
+		}
+			t_bbox += timenow() - t0;
 		}
 		// we've also computed where this object ends...
 		// "k" is not used in the rest of this loop, so set it to its next value now.
@@ -111,22 +133,46 @@ int GLUE(dallpeaks, SUFFIX)(IMGTYPE *image,
 		}
 
 		// make object cutout
-		for (oj=0; oj<ony; oj++)
-			for (oi=0; oi<onx; oi++) {
-				oimage[oi + oj*onx] = 0.;
-				i = oi + xmin;
-				j = oj + ymin;
-				// copy only pixels that are part of the current object
-				if (object[i + j*nx] == current)
-					oimage[oi + oj*onx] = image[i + j*nx];
-			}
-
+		{
+			double t0 = timenow();
+			for (oj=0; oj<ony; oj++)
+				for (oi=0; oi<onx; oi++) {
+					oimage[oi + oj*onx] = 0.;
+					i = oi + xmin;
+					j = oj + ymin;
+					// copy only pixels that are part of the current object
+					if (object[i + j*nx] == current)
+						oimage[oi + oj*onx] = image[i + j*nx];
+				}
+			t_cutout += timenow() - t0;
+		}
 		// find peaks in cutout
-		dsmooth2(oimage, onx, ony, dpsf, simage);
-		dpeaks(simage, onx, ony, &nc, xc, yc,
-			   sigma, dlim, saddle, maxper, 0, 1, minpeak);
+		{
+			double t0 = timenow();
+			dsmooth2(oimage, onx, ony, dpsf, simage);
+			{
+				double dt = timenow() - t0;
+				t_smooth += dt;
+				if (dt > log_stage_thresh) {
+					logverb("dallpeaks: object %i dsmooth2(%ix%i) took %.3f s\n", current, onx, ony, dt);
+				}
+			}
+		}
+		{
+			double t0 = timenow();
+			dpeaks(simage, onx, ony, &nc, xc, yc,
+				   sigma, dlim, saddle, maxper, 0, 1, minpeak);
+			{
+				double dt = timenow() - t0;
+				t_peaks += dt;
+				if (dt > log_stage_thresh) {
+					logverb("dallpeaks: object %i dpeaks(%ix%i) -> nc=%i took %.3f s\n", current, onx, ony, nc, dt);
+				}
+			}
+		}
 		imore = 0;
 		for (i=0; i<nc; i++) {
+			nsubpeaks_total++;
 			if (xc[i] <= 0 || xc[i] >= onx-1 ||
 				yc[i] <= 0 || yc[i] >= ony-1) {
 				logverb("Skipping subpeak %i: position %i,%i out of bounds 1:%i, 1:%i\n",
@@ -172,25 +218,37 @@ int GLUE(dallpeaks, SUFFIX)(IMGTYPE *image,
 					assert(isfinite(xcen[imore + *npeaks]));
 					assert(isfinite(ycen[imore + *npeaks]));
 				} else {
+					double t0, dt;
 					// don't add this peak.
-					logverb("Failed to find (5x5) centroid of peak %i, subpeak %i at (%i,%i)\n", current, i, xmin+xc[i], ymin+yc[i]);
+					ncentroid5_fail++;
+					debug("Failed to find (5x5) centroid of peak %i, subpeak %i at (%i,%i)\n", current, i, xmin+xc[i], ymin+yc[i]);
 					debug("5x5 box:\n  %g,%g,%g,%g,%g,%g,%g,%g,%g\n", three[0],three[1],three[2],three[3],three[4],three[5],three[6],three[7],three[8]);
 
+					// max_gaussian can be expensive; time it.
+					t0 = timenow();
 					max_gaussian(oimage, onx, ony, dpsf, xc[i], yc[i], &tmpxc, &tmpyc);
+					dt = timenow() - t0;
+					t_maxgauss += dt;
 					debug("max_gaussian: %g,%g\n", tmpxc, tmpyc);
 					xcen[imore + (*npeaks)] = tmpxc + xmin;
 					ycen[imore + (*npeaks)] = tmpyc + ymin;
 					//continue;
 				}
 			} else {
-				logverb("Failed to find (3x3) centroid of peak %i, subpeak %i at (%i,%i), and too close to edge for 5x5\n",
+				ncentroid3_fail_edge++;
+				debug("Failed to find (3x3) centroid of peak %i, subpeak %i at (%i,%i), and too close to edge for 5x5\n",
 						current, i, xmin+xc[i], ymin+yc[i]);
 			}
 			imore++;
 		}
 		(*npeaks) += imore;
 		nobj++;
+		nobj_timed++;
 	}
+
+	logverb("dallpeaks: timing summary: total %.3f s; sort %.3f s; bbox %.3f s; cutout %.3f s; smooth %.3f s; peaks %.3f s; max_gaussian %.3f s; objects %i; subpeaks %i; centroid5_fail %i; centroid3_fail_edge %i\n",
+			timenow() - t_dall_start, t_sort, t_bbox, t_cutout, t_smooth, t_peaks, t_maxgauss,
+			nobj_timed, nsubpeaks_total, ncentroid5_fail, ncentroid3_fail_edge);
 	
 	FREEVEC(indx);
 	FREEVEC(oimage);
