@@ -524,7 +524,11 @@ static void get_next_field(char* fits_image_fn,
         exit(-1);
     }
 
-    image2xy_run(&simxy, 0, 0);
+    if (image2xy_run(&simxy, 0, 0)) {
+        ERROR("image2xy_run failed (eg, too few sources); exiting.\n");
+        simplexy_free_contents(&simxy);
+        exit(-1);
+    }
 
     N = simxy.npeaks;
     *nstars = N;

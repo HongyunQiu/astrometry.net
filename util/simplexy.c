@@ -458,6 +458,12 @@ int simplexy_run(simplexy_t* s) {
                       s->sigma, s->dlim, s->saddle, s->maxper, s->maxnpeaks, s->sigma, s->maxsize);
     }
     logmsg("simplexy: found %i sources.\n", s->npeaks);
+    if (s->npeaks < 8) {
+        logmsg("simplexy: too few sources (%i < 8); aborting.\n", s->npeaks);
+        FREEVEC(ccimg);
+        FREEVEC(bgfree);
+        return 0;
+    }
     FREEVEC(ccimg);
 
     s->x   = realloc(s->x, s->npeaks * sizeof(float));

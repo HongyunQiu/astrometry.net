@@ -74,7 +74,11 @@ int image2xy_run(simplexy_t* s,
     }
 
     do {
-        simplexy_run(s);
+        if (!simplexy_run(s)) {
+            // simplexy_run() failed (eg, too few sources); abort.
+            rtn = -1;
+            goto bailout;
+        }
 
         tryagain = FALSE;
         if (s->npeaks == 0 &&

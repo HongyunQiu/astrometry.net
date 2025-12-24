@@ -44,25 +44,39 @@ static size_t dselip_median3_index(const float* arr, size_t a, size_t b, size_t 
     }
 }
 
-static size_t dselip_partition(float* arr, size_t left, size_t right, size_t pivot_index) {
-    const float pivot_value = arr[pivot_index];
-    size_t store_index = left;
+// 3-way partition (Dutch national flag): partitions arr[left..right] into
+//   [left..lt-1] < pivot, [lt..gt] == pivot, [gt+1..right] > pivot
+// This avoids quickselect degeneration when there are many values equal to the pivot
+// (common in quantized / low-dynamic-range / low-SNR images).
+static void dselip_partition3(float* arr, size_t left, size_t right, float pivot_value,
+                             size_t* out_lt, size_t* out_gt) {
+    size_t lt = left;
+    size_t i  = left;
+    size_t gt = right;
 
-    // move pivot to end
-    DSELIP_SWAP(arr[pivot_index], arr[right]);
-    for (size_t i = left; i < right; i++) {
-        if (arr[i] < pivot_value) {
-            DSELIP_SWAP(arr[store_index], arr[i]);
-            store_index++;
+    while (i <= gt) {
+        const float v = arr[i];
+        if (v < pivot_value) {
+            DSELIP_SWAP(arr[lt], arr[i]);
+            lt++;
+            i++;
+        } else if (v > pivot_value) {
+            DSELIP_SWAP(arr[i], arr[gt]);
+            if (gt == 0)
+                break;
+            gt--;
+            // don't advance i: swapped-in element from the right is unclassified
+        } else {
+            i++;
         }
     }
-    // move pivot to its final place
-    DSELIP_SWAP(arr[right], arr[store_index]);
-    return store_index;
+    *out_lt = lt;
+    *out_gt = gt;
 }
 
 static float dselip_select_kth(float* arr, size_t n, size_t k) {
     // Iterative quickselect. Returns the kth smallest element (0-based).
+    // Uses 3-way partitioning to keep performance robust when many values are equal.
     size_t left = 0;
     size_t right = n - 1;
 
@@ -71,15 +85,22 @@ static float dselip_select_kth(float* arr, size_t n, size_t k) {
             return arr[left];
 
         size_t mid = left + (right - left) / 2;
-        size_t pivot_index = dselip_median3_index(arr, left, mid, right);
-        pivot_index = dselip_partition(arr, left, right, pivot_index);
+        size_t pivot_i = dselip_median3_index(arr, left, mid, right);
+        const float pivot_value = arr[pivot_i];
 
-        if (k == pivot_index)
-            return arr[k];
-        if (k < pivot_index)
-            right = pivot_index - 1;
-        else
-            left = pivot_index + 1;
+        size_t lt, gt;
+        dselip_partition3(arr, left, right, pivot_value, &lt, &gt);
+
+        if (k < lt) {
+            if (lt == 0)
+                return arr[0];
+            right = lt - 1;
+        } else if (k > gt) {
+            left = gt + 1;
+        } else {
+            // k is within the "equal to pivot" band
+            return pivot_value;
+        }
     }
 }
 

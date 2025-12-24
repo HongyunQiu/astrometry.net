@@ -34,6 +34,7 @@ int image2xy_files(const char* infn, const char* outfn,
     int nhdus, hdutype, nimgs;
     char* str;
     simplexy_t myparams;
+    anbool params_need_free = FALSE;
 
     if (params == NULL) {
         memset(&myparams, 0, sizeof(simplexy_t));
@@ -171,7 +172,12 @@ int image2xy_files(const char* infn, const char* outfn,
         params->nx = naxisn[0];
         params->ny = naxisn[1];
 
-        image2xy_run(params, downsample, downsample_as_required);
+        params_need_free = TRUE;
+        if (image2xy_run(params, downsample, downsample_as_required)) {
+            logerr("image2xy: source extraction failed (eg, too few sources); aborting.\n");
+            goto bailout;
+        }
+        params_need_free = FALSE;
 
         if (params->Lorder)
             ncols = 6;
@@ -269,9 +275,14 @@ int image2xy_files(const char* infn, const char* outfn,
     return 0;
 
  bailout:
+    if (params_need_free)
+        simplexy_free_contents(params);
     if (fptr)
         fits_close_file(fptr, &status);
     if (ofptr)
         fits_close_file(ofptr, &status);
+    // Avoid leaving a partial output file on failure.
+    if (outfn)
+        unlink(outfn);
     return -1;
 }
